@@ -866,7 +866,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const campfires: { flame: THREE.Mesh; light: THREE.PointLight }[] = [];
 
   // ---------- time ----------
-  let timeOfDay = 21.5; // start at night
+  let timeOfDay = 17.6; // start at golden hour, dusk falls as you explore
   const DAY_SECONDS = 300;
 
   // ---------- collisions ----------
