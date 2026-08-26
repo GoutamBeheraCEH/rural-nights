@@ -866,7 +866,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const campfires: { flame: THREE.Mesh; light: THREE.PointLight }[] = [];
 
   // ---------- time ----------
-  let timeOfDay = 17.6; // start at golden hour, dusk falls as you explore
+  let timeOfDay = 15.4; // start in warm late afternoon; dusk falls as you explore
   const DAY_SECONDS = 300;
 
   // ---------- collisions ----------
@@ -911,8 +911,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     moon.position.set(player.pos.x - sunX * 400, player.pos.y - sunY * 400, player.pos.z - 120);
     moon.visible = sunY < 0.15;
     const nightness = 1 - dayness;
-    hemi.intensity = 0.15 + dayness * 0.75;
-    ambient.intensity = 0.12 + nightness * 0.22;
+    hemi.intensity = 0.3 + dayness * 0.8;
+    ambient.intensity = 0.28 + nightness * 0.22;
     ambient.color.setHex(nightness > 0.5 ? 0x2a3d6b : 0x556677);
 
     const dayTop = new THREE.Color(0x2f78c8), dayBot = new THREE.Color(0x9fc6e8);
@@ -1178,7 +1178,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       hudT = 0.15;
       const hh = Math.floor(timeOfDay);
       const mm = Math.floor((timeOfDay % 1) * 60);
-      const phase = dayness > 0.7 ? "Day" : dayness > 0.25 ? (sunY > 0 ? "Morning" : "Evening") : nightness > 0.85 ? "Night" : "Dusk";
+      const phase = timeOfDay < 5 || timeOfDay >= 20 ? "Night" : timeOfDay < 8 ? "Dawn" : timeOfDay < 12 ? "Morning" : timeOfDay < 17 ? "Afternoon" : timeOfDay < 19 ? "Evening" : "Dusk";
       onHud({
         health: player.health, hunger: player.hunger, stamina: player.stamina,
         timeLabel: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
