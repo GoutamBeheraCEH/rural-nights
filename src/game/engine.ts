@@ -140,7 +140,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const SEG = 190;
   const tGeo = new THREE.PlaneGeometry(WORLD * 2, WORLD * 2, SEG, SEG);
   tGeo.rotateX(-Math.PI / 2);
-  const pos = tGeo.attributes.position as THREE.BufferAttribute;
+  const pos = tGeo.attributes['position']! as THREE.BufferAttribute;
   const colors = new Float32Array(pos.count * 3);
   const cGrass = new THREE.Color(0x3f6b34);
   const cField = new THREE.Color(0x6f8a35);
@@ -168,7 +168,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   // ---------- water ----------
   const wGeo = new THREE.PlaneGeometry(WORLD * 2, 260, 220, 12);
   wGeo.rotateX(-Math.PI / 2);
-  const wPos = wGeo.attributes.position as THREE.BufferAttribute;
+  const wPos = wGeo.attributes['position']! as THREE.BufferAttribute;
   const wBase: number[] = [];
   for (let i = 0; i < wPos.count; i++) {
     const x = wPos.getX(i);
@@ -579,11 +579,11 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     cars.push(g);
     trainGroup.add(g);
   }
-  cars[0].add(trainHeadlight);
+  cars[0]!.add(trainHeadlight);
   trainHeadlight.position.set(4.6, 2, 0);
   const hlTarget = new THREE.Object3D();
   hlTarget.position.set(40, 0, 0);
-  cars[0].add(hlTarget);
+  cars[0]!.add(hlTarget);
   trainHeadlight.target = hlTarget;
   scene.add(trainGroup);
   // steam
@@ -759,13 +759,13 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   };
   player.pos.y = terrainHeight(player.pos.x, player.pos.z) + 1.8;
 
-  const inventory: Record<string, number> = { Wood: 0, Stone: 0, Fiber: 0, Grass: 0, Fruit: 0, Water: 0, Food: 0, Coal: 0 };
+  const inventory: Record<string, number> & { Wood: number; Stone: number; Fiber: number; Grass: number; Fruit: number; Water: number; Food: number; Coal: number } = { Wood: 0, Stone: 0, Fiber: 0, Grass: 0, Fruit: 0, Water: 0, Food: 0, Coal: 0 };
   let message: string | null = null;
   let messageT = 0;
   let objective = "Explore the village and gather resources.";
   const say = (m: string) => { message = m; messageT = 3.2; };
 
-  const keys: Record<string, boolean> = {};
+  const keys: Record<string, boolean> & { KeyW: boolean; KeyA: boolean; KeyS: boolean; KeyD: boolean; KeyQ: boolean; Space: boolean; ShiftLeft: boolean } = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyQ: false, Space: false, ShiftLeft: false };
   const onKeyDown = (e: KeyboardEvent) => {
     keys[e.code] = true;
     if (e.code === "KeyF") player.third = !player.third;
@@ -809,7 +809,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
         timeOfDay = 6.2; player.health = Math.min(100, player.health + 25); player.stamina = 100;
         say("You slept until dawn."); break;
       case "npc":
-        say(npcLines[Math.floor(Math.random() * npcLines.length)]);
+        say(npcLines[Math.floor(Math.random() * npcLines.length)]!);
         if (objective.startsWith("Explore")) objective = "Craft a campfire (3 Wood + 2 Grass).";
         break;
       case "river":
@@ -832,8 +832,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     initAudio();
     const r = recipes[name];
     if (!r) return;
-    for (const k in r.cost) if ((inventory[k] ?? 0) < r.cost[k]) { say(`Not enough ${k}`); beep(140, 0.15, "square"); return; }
-    for (const k in r.cost) inventory[k] -= r.cost[k];
+    for (const k in r.cost) if ((inventory[k] ?? 0) < (r.cost[k] ?? 0)) { say(`Not enough ${k}`); beep(140, 0.15, "square"); return; }
+    for (const k in r.cost) inventory[k] = (inventory[k] ?? 0) - (r.cost[k] ?? 0);
     inventory[r.result] = (inventory[r.result] ?? 0) + 1;
     say(`Crafted ${name}`);
     beep(660, 0.12, "triangle"); setTimeout(() => beep(880, 0.14, "triangle"), 110);
@@ -841,7 +841,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       placeCampfire();
       objective = "Survive the night. Explore further along the railway.";
     }
-    if (r.result === "Food") { inventory.Food = inventory.Food; }
+    
   }
   function placeCampfire() {
     const x = player.pos.x + Math.sin(player.yaw) * -2.5;
@@ -866,7 +866,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const campfires: { flame: THREE.Mesh; light: THREE.PointLight }[] = [];
 
   // ---------- time ----------
-  let timeOfDay = 21.5; // start at night
+  let timeOfDay = 15.4; // start in warm late afternoon; dusk falls as you explore
   const DAY_SECONDS = 300;
 
   // ---------- collisions ----------
@@ -911,8 +911,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     moon.position.set(player.pos.x - sunX * 400, player.pos.y - sunY * 400, player.pos.z - 120);
     moon.visible = sunY < 0.15;
     const nightness = 1 - dayness;
-    hemi.intensity = 0.15 + dayness * 0.75;
-    ambient.intensity = 0.12 + nightness * 0.22;
+    hemi.intensity = 0.3 + dayness * 0.8;
+    ambient.intensity = 0.28 + nightness * 0.22;
     ambient.color.setHex(nightness > 0.5 ? 0x2a3d6b : 0x556677);
 
     const dayTop = new THREE.Color(0x2f78c8), dayBot = new THREE.Color(0x9fc6e8);
@@ -921,9 +921,9 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     const dusk = Math.max(0, 1 - Math.abs(sunY) * 6);
     const top = nightTop.clone().lerp(dayTop, dayness).lerp(duskT, dusk * 0.6);
     const bot = nightBot.clone().lerp(dayBot, dayness).lerp(duskB, dusk * 0.7);
-    (skyMat.uniforms.top.value as THREE.Color).copy(top);
-    (skyMat.uniforms.bottom.value as THREE.Color).copy(bot);
-    skyMat.uniforms.starAmt.value = nightness;
+    (skyMat.uniforms['top']!.value as THREE.Color).copy(top);
+    (skyMat.uniforms['bottom']!.value as THREE.Color).copy(bot);
+    skyMat.uniforms['starAmt']!.value = nightness;
     fog.color.copy(bot).multiplyScalar(0.75);
     fog.density = 0.0026 + nightness * 0.0016;
     renderer.setClearColor(fog.color);
@@ -1011,7 +1011,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     }
 
     // ----- water waves -----
-    const wp = wGeo.attributes.position as THREE.BufferAttribute;
+    const wp = wGeo.attributes['position']! as THREE.BufferAttribute;
     for (let i = 0; i < wp.count; i++) {
       const x = wp.getX(i);
       wp.setY(i, Math.sin(now * 0.0011 + x * 0.12 + i * 0.3) * 0.18);
@@ -1051,7 +1051,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       p.y = terrainHeight(p.x, p.z);
       n.g.rotation.y = Math.atan2(dx, dz);
       const sw = Math.sin(now * 0.008 + i) * 0.35;
-      n.legs[0].rotation.x = sw; n.legs[1].rotation.x = -sw;
+      n.legs[0]!.rotation.x = sw; n.legs[1]!.rotation.x = -sw;
     });
 
     // ----- animals -----
@@ -1091,9 +1091,9 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
 
     // ----- fireflies -----
     if (ffMat.opacity > 0.02) {
-      const fp = ffGeo.attributes.position as THREE.BufferAttribute;
+      const fp = ffGeo.attributes['position']! as THREE.BufferAttribute;
       for (let i = 0; i < ffCount; i++) {
-        const s = ffSeed[i];
+        const s = ffSeed[i]!;
         fp.setY(i, terrainHeight(fp.getX(i), fp.getZ(i)) + 1.2 + Math.sin(now * 0.001 + s) * 0.8);
         fp.setX(i, fp.getX(i) + Math.sin(now * 0.0007 + s) * 0.01);
       }
@@ -1102,7 +1102,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
 
     // ----- chimney smoke -----
     chimney.forEach((s, i) => {
-      const v = villages[i % villages.length];
+      const v = villages[i % villages.length]!;
       const t = ((now * 0.00012) + i * 0.13) % 1;
       s.position.set(v.x + (i * 7) % 30 - 15, terrainHeight(v.x, v.z) + 4 + t * 12, v.z + (i * 11) % 30 - 15);
       (s.material as THREE.Material).opacity = (1 - t) * 0.2;
@@ -1133,7 +1133,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
         (s.material as THREE.MeshLambertMaterial).opacity = (1 - age) * 0.3;
         s.scale.setScalar(0.6 + age * 2.5);
       });
-      const distToTrain = cars[0].position.distanceTo(player.pos);
+      const distToTrain = cars[0]!.position.distanceTo(player.pos);
       hornT -= dt;
       if (hornT <= 0 && distToTrain < 260 && trainGroup.visible) { trainHorn(); hornT = R(14, 26); }
     } else {
@@ -1178,7 +1178,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       hudT = 0.15;
       const hh = Math.floor(timeOfDay);
       const mm = Math.floor((timeOfDay % 1) * 60);
-      const phase = dayness > 0.7 ? "Day" : dayness > 0.25 ? (sunY > 0 ? "Morning" : "Evening") : nightness > 0.85 ? "Night" : "Dusk";
+      const phase = timeOfDay < 5 || timeOfDay >= 20 ? "Night" : timeOfDay < 8 ? "Dawn" : timeOfDay < 12 ? "Morning" : timeOfDay < 17 ? "Afternoon" : timeOfDay < 19 ? "Evening" : "Dusk";
       onHud({
         health: player.health, hunger: player.hunger, stamina: player.stamina,
         timeLabel: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,

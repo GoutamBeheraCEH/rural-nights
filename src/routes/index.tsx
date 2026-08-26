@@ -1,24 +1,44 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ClientOnly } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
+const GameCanvas = lazy(() => import("@/components/GameCanvas"));
+
+const title = "Lantern Fields — 3D Peaceful Village Survival Sandbox";
+const description =
+  "Explore a calm riverside countryside in 3D: lantern-lit villages, wandering neighbours, a night train across the bridge. Gather, craft and survive gently until dawn.";
+
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
+function Loading() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-[#05070f] text-sm text-white/60">
+      Building the world…
+    </div>
+  );
+}
+
 function Index() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <main>
+      <h1 className="sr-only">Lantern Fields — 3D peaceful village survival sandbox</h1>
+      <ClientOnly fallback={<Loading />}>
+        <Suspense fallback={<Loading />}>
+          <GameCanvas />
+        </Suspense>
+      </ClientOnly>
+    </main>
   );
 }
