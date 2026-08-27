@@ -204,12 +204,14 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const hemi = new THREE.HemisphereLight(0x8fb2ff, 0x2c3a25, 0.5);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff3d6, 1.0);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.castShadow = Q.shadows;
+  sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 260;
+  sun.shadow.bias = -0.0006;
   const sc = sun.shadow.camera as THREE.OrthographicCamera;
   sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70;
+
   scene.add(sun, sun.target);
   const ambient = new THREE.AmbientLight(0x334466, 0.35);
   scene.add(ambient);
