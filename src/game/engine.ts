@@ -256,12 +256,26 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     wPos.setZ(i, wPos.getZ(i) + riverZ(x));
     wBase.push(wPos.getZ(i));
   }
+  const waterUniforms = { uTime: { value: 0 } };
   const waterMat = new THREE.MeshPhongMaterial({
     color: 0x1d3f5c, transparent: true, opacity: 0.82, shininess: 120, specular: 0x9fd8ff,
   });
+  // GPU-side ripples: no per-frame CPU vertex work
+  waterMat.onBeforeCompile = (shader) => {
+    shader.uniforms['uTime'] = waterUniforms.uTime;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;")
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+         transformed.y += sin(uTime * 1.1 + position.x * 0.12) * 0.18
+                        + sin(uTime * 0.7 + position.z * 0.21) * 0.10;`
+      );
+  };
   const water = new THREE.Mesh(wGeo, waterMat);
   water.position.y = WATER_LEVEL();
   scene.add(water);
+
 
   // ---------- helpers to add objects ----------
   const solids: { x: number; z: number; r: number }[] = [];
