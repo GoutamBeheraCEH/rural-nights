@@ -1,5 +1,21 @@
 import * as THREE from "three";
 
+export type PerfStats = {
+  fps: number;
+  frameMs: number;
+  drawCalls: number;
+  triangles: number;
+  programs: number;
+  activeNpcs: number;
+  activeAnimals: number;
+  visibleChunks: number;
+  quality: string;
+  resScale: number;
+  geometries: number;
+  textures: number;
+  memoryMb: number | null;
+};
+
 export type HudState = {
   health: number;
   hunger: number;
@@ -11,15 +27,20 @@ export type HudState = {
   message: string | null;
   fps: number;
   objective: string;
+  quality: string;
+  perf: PerfStats | null;
 };
 
 export type GameHandle = {
   dispose: () => void;
   craft: (recipe: string) => void;
   requestPointerLock: () => void;
+  setQuality: (q: string) => void;
+  toggleStats: () => void;
 };
 
 type Cb = (s: HudState) => void;
+
 
 const R = (a: number, b: number) => a + Math.random() * (b - a);
 const WORLD = 460; // half-size
@@ -64,12 +85,68 @@ export function terrainHeight(x: number, z: number) {
 }
 const WATER_LEVEL = () => 0.6;
 
+// ---------------- adaptive quality presets ----------------
+type QualityPreset = {
+  name: string;
+  resScale: number;
+  shadows: boolean;
+  shadowMap: number;
+  shadowSoft: boolean;
+  drawDistance: number;
+  grassCount: number;
+  bushCount: number;
+  dynLights: number;
+  fireflies: number;
+  antialias: boolean;
+  waterSegments: number;
+  detailDistance: number;
+};
+
+const PRESETS: Record<string, QualityPreset> = {
+  Performance: { name: "Performance", resScale: 0.68, shadows: false, shadowMap: 512, shadowSoft: false, drawDistance: 170, grassCount: 1200, bushCount: 500, dynLights: 3, fireflies: 90, antialias: false, waterSegments: 40, detailDistance: 45 },
+  Balanced: { name: "Balanced", resScale: 0.85, shadows: true, shadowMap: 1024, shadowSoft: false, drawDistance: 260, grassCount: 3000, bushCount: 900, dynLights: 5, fireflies: 180, antialias: false, waterSegments: 70, detailDistance: 70 },
+  Quality: { name: "Quality", resScale: 1, shadows: true, shadowMap: 2048, shadowSoft: true, drawDistance: 360, grassCount: 6000, bushCount: 1400, dynLights: 7, fireflies: 300, antialias: true, waterSegments: 110, detailDistance: 100 },
+  Ultra: { name: "Ultra", resScale: 1, shadows: true, shadowMap: 2048, shadowSoft: true, drawDistance: 460, grassCount: 9000, bushCount: 1800, dynLights: 8, fireflies: 420, antialias: true, waterSegments: 150, detailDistance: 140 },
+};
+const ORDER = ["Performance", "Balanced", "Quality", "Ultra"];
+
+function detectQuality(): string {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    let gpu = "";
+    if (gl) {
+      const ext = (gl as WebGLRenderingContext).getExtension("WEBGL_debug_renderer_info");
+      if (ext) gpu = String((gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? "").toLowerCase();
+    }
+    const cores = navigator.hardwareConcurrency ?? 4;
+    const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 4;
+    const mobile = /android|iphone|ipad|mobile/i.test(navigator.userAgent);
+    if (mobile || cores <= 2 || mem <= 2) return "Performance";
+    const weak = /intel|uhd|hd graphics|swiftshader|llvmpipe|mali|adreno|apple gpu/.test(gpu);
+    if (weak) return cores >= 8 && mem >= 8 ? "Balanced" : "Performance";
+    const strong = /rtx|radeon rx|geforce (gtx )?(1[6-9]|[2-4][0-9])|apple m[1-9]/.test(gpu);
+    if (strong && cores >= 8 && mem >= 8) return "Quality";
+    if (cores >= 8 && mem >= 8) return "Balanced";
+    return "Balanced";
+  } catch {
+    return "Balanced";
+  }
+}
+
 export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+  let qName = detectQuality();
+  let Q: QualityPreset = PRESETS[qName]!;
+  let resScale = Q.resScale;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance", stencil: false });
+  const basePR = Math.min(window.devicePixelRatio, 1.5);
+  renderer.setPixelRatio(basePR * resScale);
+
   renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = Q.shadows;
+  renderer.shadowMap.type = Q.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = Q.shadows;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   container.appendChild(renderer.domElement);
@@ -78,6 +155,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1400);
   const fog = new THREE.FogExp2(0x0a1430, 0.0035);
   scene.fog = fog;
+
 
   // ---------- sky ----------
   const skyGeo = new THREE.SphereGeometry(900, 32, 20);
@@ -126,12 +204,14 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const hemi = new THREE.HemisphereLight(0x8fb2ff, 0x2c3a25, 0.5);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff3d6, 1.0);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.castShadow = Q.shadows;
+  sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 260;
+  sun.shadow.bias = -0.0006;
   const sc = sun.shadow.camera as THREE.OrthographicCamera;
   sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70;
+
   scene.add(sun, sun.target);
   const ambient = new THREE.AmbientLight(0x334466, 0.35);
   scene.add(ambient);
@@ -166,8 +246,9 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   scene.add(ground);
 
   // ---------- water ----------
-  const wGeo = new THREE.PlaneGeometry(WORLD * 2, 260, 220, 12);
+  const wGeo = new THREE.PlaneGeometry(WORLD * 2, 260, Q.waterSegments, 6);
   wGeo.rotateX(-Math.PI / 2);
+
   const wPos = wGeo.attributes['position']! as THREE.BufferAttribute;
   const wBase: number[] = [];
   for (let i = 0; i < wPos.count; i++) {
@@ -175,12 +256,26 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     wPos.setZ(i, wPos.getZ(i) + riverZ(x));
     wBase.push(wPos.getZ(i));
   }
+  const waterUniforms = { uTime: { value: 0 } };
   const waterMat = new THREE.MeshPhongMaterial({
     color: 0x1d3f5c, transparent: true, opacity: 0.82, shininess: 120, specular: 0x9fd8ff,
   });
+  // GPU-side ripples: no per-frame CPU vertex work
+  waterMat.onBeforeCompile = (shader) => {
+    shader.uniforms['uTime'] = waterUniforms.uTime;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;")
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+         transformed.y += sin(uTime * 1.1 + position.x * 0.12) * 0.18
+                        + sin(uTime * 0.7 + position.z * 0.21) * 0.10;`
+      );
+  };
   const water = new THREE.Mesh(wGeo, waterMat);
   water.position.y = WATER_LEVEL();
   scene.add(water);
+
 
   // ---------- helpers to add objects ----------
   const solids: { x: number; z: number; r: number }[] = [];
