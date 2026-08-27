@@ -246,8 +246,9 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   scene.add(ground);
 
   // ---------- water ----------
-  const wGeo = new THREE.PlaneGeometry(WORLD * 2, 260, 220, 12);
+  const wGeo = new THREE.PlaneGeometry(WORLD * 2, 260, Q.waterSegments, 6);
   wGeo.rotateX(-Math.PI / 2);
+
   const wPos = wGeo.attributes['position']! as THREE.BufferAttribute;
   const wBase: number[] = [];
   for (let i = 0; i < wPos.count; i++) {
