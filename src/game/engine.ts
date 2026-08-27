@@ -85,15 +85,64 @@ export function terrainHeight(x: number, z: number) {
 }
 const WATER_LEVEL = () => 0.6;
 
+// ---------------- adaptive quality presets ----------------
+type QualityPreset = {
+  name: string;
+  resScale: number;
+  shadows: boolean;
+  shadowMap: number;
+  shadowSoft: boolean;
+  drawDistance: number;
+  grassCount: number;
+  bushCount: number;
+  dynLights: number;
+  fireflies: number;
+  antialias: boolean;
+  waterSegments: number;
+  detailDistance: number;
+};
+
+const PRESETS: Record<string, QualityPreset> = {
+  Performance: { name: "Performance", resScale: 0.68, shadows: false, shadowMap: 512, shadowSoft: false, drawDistance: 170, grassCount: 1200, bushCount: 500, dynLights: 3, fireflies: 90, antialias: false, waterSegments: 40, detailDistance: 45 },
+  Balanced: { name: "Balanced", resScale: 0.85, shadows: true, shadowMap: 1024, shadowSoft: false, drawDistance: 260, grassCount: 3000, bushCount: 900, dynLights: 5, fireflies: 180, antialias: false, waterSegments: 70, detailDistance: 70 },
+  Quality: { name: "Quality", resScale: 1, shadows: true, shadowMap: 2048, shadowSoft: true, drawDistance: 360, grassCount: 6000, bushCount: 1400, dynLights: 7, fireflies: 300, antialias: true, waterSegments: 110, detailDistance: 100 },
+  Ultra: { name: "Ultra", resScale: 1, shadows: true, shadowMap: 2048, shadowSoft: true, drawDistance: 460, grassCount: 9000, bushCount: 1800, dynLights: 8, fireflies: 420, antialias: true, waterSegments: 150, detailDistance: 140 },
+};
+const ORDER = ["Performance", "Balanced", "Quality", "Ultra"];
+
+function detectQuality(): string {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    let gpu = "";
+    if (gl) {
+      const ext = (gl as WebGLRenderingContext).getExtension("WEBGL_debug_renderer_info");
+      if (ext) gpu = String((gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? "").toLowerCase();
+    }
+    const cores = navigator.hardwareConcurrency ?? 4;
+    const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 4;
+    const mobile = /android|iphone|ipad|mobile/i.test(navigator.userAgent);
+    if (mobile || cores <= 2 || mem <= 2) return "Performance";
+    const weak = /intel|uhd|hd graphics|swiftshader|llvmpipe|mali|adreno|apple gpu/.test(gpu);
+    if (weak) return cores >= 8 && mem >= 8 ? "Balanced" : "Performance";
+    const strong = /rtx|radeon rx|geforce (gtx )?(1[6-9]|[2-4][0-9])|apple m[1-9]/.test(gpu);
+    if (strong && cores >= 8 && mem >= 8) return "Quality";
+    if (cores >= 8 && mem >= 8) return "Balanced";
+    return "Balanced";
+  } catch {
+    return "Balanced";
+  }
+}
+
 export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  container.appendChild(renderer.domElement);
+  let qName = detectQuality();
+  let Q: QualityPreset = PRESETS[qName]!;
+  let resScale = Q.resScale;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: "high-performance", stencil: false });
+  const basePR = Math.min(window.devicePixelRatio, 1.5);
+  renderer.setPixelRatio(basePR * resScale);
+
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1400);
