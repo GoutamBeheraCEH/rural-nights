@@ -1,5 +1,21 @@
 import * as THREE from "three";
 
+export type PerfStats = {
+  fps: number;
+  frameMs: number;
+  drawCalls: number;
+  triangles: number;
+  programs: number;
+  activeNpcs: number;
+  activeAnimals: number;
+  visibleChunks: number;
+  quality: string;
+  resScale: number;
+  geometries: number;
+  textures: number;
+  memoryMb: number | null;
+};
+
 export type HudState = {
   health: number;
   hunger: number;
@@ -11,15 +27,20 @@ export type HudState = {
   message: string | null;
   fps: number;
   objective: string;
+  quality: string;
+  perf: PerfStats | null;
 };
 
 export type GameHandle = {
   dispose: () => void;
   craft: (recipe: string) => void;
   requestPointerLock: () => void;
+  setQuality: (q: string) => void;
+  toggleStats: () => void;
 };
 
 type Cb = (s: HudState) => void;
+
 
 const R = (a: number, b: number) => a + Math.random() * (b - a);
 const WORLD = 460; // half-size
