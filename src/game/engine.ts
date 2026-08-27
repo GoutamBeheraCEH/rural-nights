@@ -143,11 +143,19 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const basePR = Math.min(window.devicePixelRatio, 1.5);
   renderer.setPixelRatio(basePR * resScale);
 
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.shadowMap.enabled = Q.shadows;
+  renderer.shadowMap.type = Q.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = Q.shadows;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1400);
   const fog = new THREE.FogExp2(0x0a1430, 0.0035);
   scene.fog = fog;
+
 
   // ---------- sky ----------
   const skyGeo = new THREE.SphereGeometry(900, 32, 20);
