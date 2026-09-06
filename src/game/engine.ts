@@ -1163,13 +1163,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       if (dr < RIVER_W + 4) currentInteract = { x: 0, z: 0, y: 0, r: 0, label: "Collect river water", kind: "river" };
     }
 
-    // ----- water waves -----
-    const wp = wGeo.attributes['position']! as THREE.BufferAttribute;
-    for (let i = 0; i < wp.count; i++) {
-      const x = wp.getX(i);
-      wp.setY(i, Math.sin(now * 0.0011 + x * 0.12 + i * 0.3) * 0.18);
-    }
-    wp.needsUpdate = true;
+    // ----- water waves (GPU vertex shader) -----
+    waterUniforms.uTime.value = now * 0.001;
 
     // ----- grass wind -----
     grassMat.color.setHSL(0.28, 0.35, 0.22 + dayness * 0.14);
