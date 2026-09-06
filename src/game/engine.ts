@@ -1307,5 +1307,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     },
     craft,
     requestPointerLock: () => renderer.domElement.requestPointerLock(),
+    setQuality: (q: string) => { if (PRESETS[q]) { autoQuality = false; applyQuality(q); } },
+    toggleStats: () => { showStats = !showStats; },
   };
 }
