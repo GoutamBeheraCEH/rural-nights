@@ -985,7 +985,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   let showStats = false;
   let autoQuality = true;
   let activeNpcs = 0, activeAnimals = 0;
-  let adaptT = 3, aiT = 0, lightT = 0, ffT = 0;
+  let adaptT = 3, aiT = 0, aiAccum = 0, lightT = 0, ffT = 0;
   const fpsHistory: number[] = [];
   const tmpV = new THREE.Vector3();
 
