@@ -117,7 +117,38 @@ export default function GameCanvas() {
         <div className="absolute right-5 top-5 rounded-xl bg-black/30 px-4 py-3 text-right backdrop-blur-sm">
           <div className="text-2xl font-semibold tabular-nums">{hud.timeLabel}</div>
           <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">{hud.dayPhase}</div>
-          <div className="mt-1 text-[10px] text-white/40">{hud.fps} fps</div>
+          <div className="mt-1 text-[10px] text-white/40">
+            {hud.fps} fps · {hud.quality}
+          </div>
+          <div className="pointer-events-auto mt-2 flex justify-end gap-1">
+            {QUALITIES.map((q) => (
+              <button
+                key={q}
+                onClick={() => handleRef.current?.setQuality(q)}
+                className={`rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider transition ${
+                  hud.quality === q ? "bg-amber-300 text-black" : "bg-white/10 text-white/60 hover:bg-white/20"
+                }`}
+              >
+                {q.slice(0, 4)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {hud.perf && (
+          <div className="absolute left-5 top-32 rounded-lg bg-black/55 px-3 py-2 font-mono text-[10px] leading-relaxed text-emerald-200/90 backdrop-blur-sm">
+            <div>fps {hud.perf.fps} · frame {hud.perf.frameMs}ms</div>
+            <div>draws {hud.perf.drawCalls} · tris {hud.perf.triangles.toLocaleString()}</div>
+            <div>geo {hud.perf.geometries} · tex {hud.perf.textures} · prog {hud.perf.programs}</div>
+            <div>npc {hud.perf.activeNpcs} · animals {hud.perf.activeAnimals}</div>
+            <div>quality {hud.perf.quality} · res x{hud.perf.resScale}</div>
+            {hud.perf.memoryMb !== null && <div>heap {hud.perf.memoryMb} MB</div>}
+            <div className="text-white/40">[F3] hide</div>
+          </div>
+        )}
+
+        <div className="absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-black/30 px-4 py-1.5 text-xs text-white/85 backdrop-blur-sm">
+          {hud.objective}
         </div>
 
         <div className="absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-black/30 px-4 py-1.5 text-xs text-white/85 backdrop-blur-sm">
