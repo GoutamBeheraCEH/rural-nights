@@ -1170,9 +1170,25 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     grassMat.color.setHSL(0.28, 0.35, 0.22 + dayness * 0.14);
     palmTops.rotation.y = Math.sin(now * 0.0004) * 0.02;
 
+    // ----- AI tick throttling -----
+    aiT -= dt;
+    const slowTick = aiT <= 0;
+    const adt = slowTick ? Math.min(0.6, aiAccum + dt) : 0;
+    if (slowTick) { aiT = 0.2; aiAccum = 0; } else aiAccum += dt;
+    const cullD = Q.drawDistance;
+    const detailD = Q.detailDistance;
+    activeNpcs = 0; activeAnimals = 0;
+
     // ----- npcs -----
     npcs.forEach((n, i) => {
       const p = n.g.position;
+      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+      if (pd > cullD) { n.g.visible = false; return; }
+      n.g.visible = true;
+      const near = pd < detailD;
+      if (!near && !slowTick) return;
+      const sdt = near ? dt : adt;
+      activeNpcs++;
       const sleeping = nightness > 0.7;
       if (sleeping) {
         n.g.rotation.x = -Math.PI / 2.2;
@@ -1185,31 +1201,38 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
         n.target.set(n.home.x + R(-22, 22), n.home.y + R(-22, 22));
         n.talkT = Math.random() < 0.4 ? R(2, 5) : 0;
       }
-      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
       if (pd < 7) {
         // face the player
         n.g.rotation.y = Math.atan2(player.pos.x - p.x, player.pos.z - p.z);
         n.talkT = 0.6;
       }
-      if (n.talkT > 0) { n.talkT -= dt; n.g.position.y = terrainHeight(p.x, p.z); return; }
+      if (n.talkT > 0) { n.talkT -= sdt; n.g.position.y = terrainHeight(p.x, p.z); return; }
       const dx = n.target.x - p.x, dz = n.target.y - p.z;
       const len = Math.hypot(dx, dz) || 1;
-      p.x += (dx / len) * n.speed * dt;
-      p.z += (dz / len) * n.speed * dt;
+      p.x += (dx / len) * n.speed * sdt;
+      p.z += (dz / len) * n.speed * sdt;
       p.y = terrainHeight(p.x, p.z);
       n.g.rotation.y = Math.atan2(dx, dz);
-      const sw = Math.sin(now * 0.008 + i) * 0.35;
-      n.legs[0]!.rotation.x = sw; n.legs[1]!.rotation.x = -sw;
+      if (near) {
+        const sw = Math.sin(now * 0.008 + i) * 0.35;
+        n.legs[0]!.rotation.x = sw; n.legs[1]!.rotation.x = -sw;
+      }
     });
 
     // ----- animals -----
     animals.forEach((a) => {
       const p = a.g.position;
+      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+      if (pd > cullD) { a.g.visible = false; return; }
+      a.g.visible = true;
+      const near = pd < detailD;
+      if (!near && !slowTick) return;
+      const sdt = near ? dt : adt;
+      activeAnimals++;
       const sleeping = nightness > 0.75 && a.kind !== "dog";
       if (sleeping) { p.y = terrainHeight(p.x, p.z) + 0.05; a.g.rotation.z = 0.35; return; }
       a.g.rotation.z = 0;
-      a.t -= dt;
-      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+      a.t -= sdt;
       if (pd < 6 && a.kind !== "dog") {
         a.target.set(p.x + (p.x - player.pos.x), p.z + (p.z - player.pos.z));
       } else if (a.kind === "dog" && pd < 18) {
@@ -1221,8 +1244,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       const dx = a.target.x - p.x, dz = a.target.y - p.z;
       const len = Math.hypot(dx, dz);
       if (len > 1) {
-        p.x += (dx / len) * a.speed * dt;
-        p.z += (dz / len) * a.speed * dt;
+        p.x += (dx / len) * a.speed * sdt;
+        p.z += (dz / len) * a.speed * sdt;
         a.g.rotation.y = Math.atan2(dx, dz) - Math.PI / 2;
       }
       p.y = terrainHeight(p.x, p.z);
