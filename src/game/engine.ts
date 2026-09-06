@@ -864,6 +864,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const onKeyDown = (e: KeyboardEvent) => {
     keys[e.code] = true;
     if (e.code === "KeyF") player.third = !player.third;
+    if (e.code === "F3") { e.preventDefault(); showStats = !showStats; }
     if (e.code === "KeyE") tryInteract();
     if (e.code === "Space") e.preventDefault();
   };
