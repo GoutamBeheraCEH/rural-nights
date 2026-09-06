@@ -1274,6 +1274,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       const hh = Math.floor(timeOfDay);
       const mm = Math.floor((timeOfDay % 1) * 60);
       const phase = timeOfDay < 5 || timeOfDay >= 20 ? "Night" : timeOfDay < 8 ? "Dawn" : timeOfDay < 12 ? "Morning" : timeOfDay < 17 ? "Afternoon" : timeOfDay < 19 ? "Evening" : "Dusk";
+      const info = renderer.info;
+      const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
       onHud({
         health: player.health, hunger: player.hunger, stamina: player.stamina,
         timeLabel: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
@@ -1281,6 +1283,24 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
         prompt: currentInteract ? `[E] ${currentInteract.label}` : null,
         inventory: { ...inventory },
         message, fps, objective,
+        quality: qName,
+        perf: showStats
+          ? {
+              fps,
+              frameMs: Math.round((performance.now() - now) * 100) / 100,
+              drawCalls: info.render.calls,
+              triangles: info.render.triangles,
+              programs: info.programs?.length ?? 0,
+              activeNpcs,
+              activeAnimals,
+              visibleChunks: 0,
+              quality: qName,
+              resScale: Math.round(resScale * 100) / 100,
+              geometries: info.memory.geometries,
+              textures: info.memory.textures,
+              memoryMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+            }
+          : null,
       });
     }
   }
