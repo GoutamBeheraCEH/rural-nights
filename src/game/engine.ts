@@ -981,6 +981,56 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   let trainT = -0.35;
   let trainActive = true;
 
+  // perf / adaptive quality state
+  let showStats = false;
+  let autoQuality = true;
+  let activeNpcs = 0, activeAnimals = 0;
+  let adaptT = 3, aiT = 0, lightT = 0, ffT = 0;
+  const fpsHistory: number[] = [];
+  const tmpV = new THREE.Vector3();
+
+  function applyQuality(name: string) {
+    qName = name;
+    Q = PRESETS[name]!;
+    resScale = Q.resScale;
+    renderer.setPixelRatio(basePR * resScale);
+    renderer.shadowMap.enabled = Q.shadows;
+    renderer.shadowMap.autoUpdate = Q.shadows;
+    renderer.shadowMap.type = Q.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    sun.castShadow = Q.shadows;
+    camera.far = Math.max(600, Q.drawDistance * 3);
+    camera.updateProjectionMatrix();
+    fpsHistory.length = 0;
+  }
+
+  function adapt(dt: number) {
+    if (!autoQuality) return;
+    adaptT -= dt;
+    fpsHistory.push(fps);
+    if (fpsHistory.length > 40) fpsHistory.shift();
+    if (adaptT > 0 || fpsHistory.length < 12) return;
+    adaptT = 4;
+    const avg = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+    const idx = ORDER.indexOf(qName);
+    if (avg < 52) {
+      if (resScale > 0.62) {
+        resScale = Math.max(0.62, resScale - 0.1);
+        renderer.setPixelRatio(basePR * resScale);
+      } else if (idx > 0) {
+        applyQuality(ORDER[idx - 1]!);
+      }
+      fpsHistory.length = 0;
+    } else if (avg > 78) {
+      if (resScale < Q.resScale) {
+        resScale = Math.min(Q.resScale, resScale + 0.08);
+        renderer.setPixelRatio(basePR * resScale);
+      } else if (idx < ORDER.length - 1 && avg > 88) {
+        applyQuality(ORDER[idx + 1]!);
+      }
+      fpsHistory.length = 0;
+    }
+  }
+
   const camOffset = new THREE.Vector3();
 
   function frame() {
