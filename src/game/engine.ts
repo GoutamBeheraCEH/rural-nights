@@ -1039,7 +1039,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     frames++; fpsT += dt;
-    if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
+    if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; adapt(0.5); }
 
     timeOfDay = (timeOfDay + (24 / DAY_SECONDS) * dt) % 24;
 
