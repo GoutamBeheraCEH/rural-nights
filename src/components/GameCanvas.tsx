@@ -12,6 +12,8 @@ const RECIPES: { name: string; cost: string }[] = [
   { name: "Fishing Rod", cost: "3 Wood + 3 Fiber" },
 ];
 
+const QUALITIES = ["Performance", "Balanced", "Quality", "Ultra"];
+
 const initialHud: HudState = {
   health: 100,
   hunger: 100,
@@ -23,6 +25,8 @@ const initialHud: HudState = {
   message: null,
   fps: 0,
   objective: "Explore the village and gather resources.",
+  quality: "Balanced",
+  perf: null,
 };
 
 function Bar({ label, value, tone }: { label: string; value: number; tone: string }) {
