@@ -1260,13 +1260,15 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       b.visible = dayness > 0.25;
     });
 
-    // ----- fireflies -----
-    if (ffMat.opacity > 0.02) {
+    // ----- fireflies (throttled, ~10Hz) -----
+    ffT -= dt;
+    if (ffMat.opacity > 0.02 && ffT <= 0) {
+      ffT = 0.1;
       const fp = ffGeo.attributes['position']! as THREE.BufferAttribute;
       for (let i = 0; i < ffCount; i++) {
         const s = ffSeed[i]!;
         fp.setY(i, terrainHeight(fp.getX(i), fp.getZ(i)) + 1.2 + Math.sin(now * 0.001 + s) * 0.8);
-        fp.setX(i, fp.getX(i) + Math.sin(now * 0.0007 + s) * 0.01);
+        fp.setX(i, fp.getX(i) + Math.sin(now * 0.0007 + s) * 0.05);
       }
       fp.needsUpdate = true;
     }
