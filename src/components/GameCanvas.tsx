@@ -185,7 +185,7 @@ export default function GameCanvas() {
         </div>
 
         <div className="absolute bottom-5 right-5 text-[11px] text-white/50">
-          [C] Crafting · [E] Interact · [Shift] Sprint · [Space] Jump
+          [C] Crafting · [E] Interact · [Shift] Sprint · [Space] Jump · [F3] Stats
         </div>
       </div>
 
