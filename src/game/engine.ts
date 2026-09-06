@@ -313,7 +313,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   }
 
   // ---------- houses / villages ----------
-  const lampLights: { light: THREE.PointLight; base: number }[] = [];
+  const lampLights: { light: THREE.PointLight; base: number; on?: boolean }[] = [];
   const windowMats: THREE.MeshBasicMaterial[] = [];
 
   function buildHouse(x: number, z: number, rot: number, variant: number) {
@@ -864,6 +864,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   const onKeyDown = (e: KeyboardEvent) => {
     keys[e.code] = true;
     if (e.code === "KeyF") player.third = !player.third;
+    if (e.code === "F3") { e.preventDefault(); showStats = !showStats; }
     if (e.code === "KeyE") tryInteract();
     if (e.code === "Space") e.preventDefault();
   };
@@ -981,6 +982,56 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   let trainT = -0.35;
   let trainActive = true;
 
+  // perf / adaptive quality state
+  let showStats = false;
+  let autoQuality = true;
+  let activeNpcs = 0, activeAnimals = 0;
+  let adaptT = 3, aiT = 0, aiAccum = 0, lightT = 0, ffT = 0;
+  const fpsHistory: number[] = [];
+  const tmpV = new THREE.Vector3();
+
+  function applyQuality(name: string) {
+    qName = name;
+    Q = PRESETS[name]!;
+    resScale = Q.resScale;
+    renderer.setPixelRatio(basePR * resScale);
+    renderer.shadowMap.enabled = Q.shadows;
+    renderer.shadowMap.autoUpdate = Q.shadows;
+    renderer.shadowMap.type = Q.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    sun.castShadow = Q.shadows;
+    camera.far = Math.max(600, Q.drawDistance * 3);
+    camera.updateProjectionMatrix();
+    fpsHistory.length = 0;
+  }
+
+  function adapt(dt: number) {
+    if (!autoQuality) return;
+    adaptT -= dt;
+    fpsHistory.push(fps);
+    if (fpsHistory.length > 40) fpsHistory.shift();
+    if (adaptT > 0 || fpsHistory.length < 12) return;
+    adaptT = 4;
+    const avg = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+    const idx = ORDER.indexOf(qName);
+    if (avg < 52) {
+      if (resScale > 0.62) {
+        resScale = Math.max(0.62, resScale - 0.1);
+        renderer.setPixelRatio(basePR * resScale);
+      } else if (idx > 0) {
+        applyQuality(ORDER[idx - 1]!);
+      }
+      fpsHistory.length = 0;
+    } else if (avg > 78) {
+      if (resScale < Q.resScale) {
+        resScale = Math.min(Q.resScale, resScale + 0.08);
+        renderer.setPixelRatio(basePR * resScale);
+      } else if (idx < ORDER.length - 1 && avg > 88) {
+        applyQuality(ORDER[idx + 1]!);
+      }
+      fpsHistory.length = 0;
+    }
+  }
+
   const camOffset = new THREE.Vector3();
 
   function frame() {
@@ -989,7 +1040,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     frames++; fpsT += dt;
-    if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
+    if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; adapt(0.5); }
 
     timeOfDay = (timeOfDay + (24 / DAY_SECONDS) * dt) % 24;
 
@@ -1023,9 +1074,17 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     fog.density = 0.0026 + nightness * 0.0016;
     renderer.setClearColor(fog.color);
 
-    // village lights
+    // village lights — pooled: only the N nearest lamps stay lit
     const lampOn = nightness;
-    lampLights.forEach((l) => { l.light.intensity = l.base * lampOn * 1.2; });
+    lightT -= dt;
+    if (lightT <= 0) {
+      lightT = 0.4;
+      const near = lampLights
+        .map((l) => ({ l, d: l.light.getWorldPosition(tmpV).distanceToSquared(player.pos) }))
+        .sort((a, b) => a.d - b.d);
+      near.forEach((e, i) => { e.l.on = i < Q.dynLights && e.d < Q.drawDistance * Q.drawDistance; });
+    }
+    lampLights.forEach((l) => { l.light.intensity = l.on ? l.base * lampOn * 1.2 : 0; });
     windowMats.forEach((m) => m.color.setRGB(1 * (0.25 + lampOn * 0.75), 0.72 * (0.25 + lampOn * 0.75), 0.35 * (0.3 + lampOn * 0.7)));
     ffMat.opacity = Math.max(0, nightness - 0.45) * 1.6;
 
@@ -1105,21 +1164,32 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       if (dr < RIVER_W + 4) currentInteract = { x: 0, z: 0, y: 0, r: 0, label: "Collect river water", kind: "river" };
     }
 
-    // ----- water waves -----
-    const wp = wGeo.attributes['position']! as THREE.BufferAttribute;
-    for (let i = 0; i < wp.count; i++) {
-      const x = wp.getX(i);
-      wp.setY(i, Math.sin(now * 0.0011 + x * 0.12 + i * 0.3) * 0.18);
-    }
-    wp.needsUpdate = true;
+    // ----- water waves (GPU vertex shader) -----
+    waterUniforms.uTime.value = now * 0.001;
 
     // ----- grass wind -----
     grassMat.color.setHSL(0.28, 0.35, 0.22 + dayness * 0.14);
     palmTops.rotation.y = Math.sin(now * 0.0004) * 0.02;
 
+    // ----- AI tick throttling -----
+    aiT -= dt;
+    const slowTick = aiT <= 0;
+    const adt = slowTick ? Math.min(0.6, aiAccum + dt) : 0;
+    if (slowTick) { aiT = 0.2; aiAccum = 0; } else aiAccum += dt;
+    const cullD = Q.drawDistance;
+    const detailD = Q.detailDistance;
+    activeNpcs = 0; activeAnimals = 0;
+
     // ----- npcs -----
     npcs.forEach((n, i) => {
       const p = n.g.position;
+      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+      if (pd > cullD) { n.g.visible = false; return; }
+      n.g.visible = true;
+      const near = pd < detailD;
+      if (!near && !slowTick) return;
+      const sdt = near ? dt : adt;
+      activeNpcs++;
       const sleeping = nightness > 0.7;
       if (sleeping) {
         n.g.rotation.x = -Math.PI / 2.2;
@@ -1132,31 +1202,38 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
         n.target.set(n.home.x + R(-22, 22), n.home.y + R(-22, 22));
         n.talkT = Math.random() < 0.4 ? R(2, 5) : 0;
       }
-      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
       if (pd < 7) {
         // face the player
         n.g.rotation.y = Math.atan2(player.pos.x - p.x, player.pos.z - p.z);
         n.talkT = 0.6;
       }
-      if (n.talkT > 0) { n.talkT -= dt; n.g.position.y = terrainHeight(p.x, p.z); return; }
+      if (n.talkT > 0) { n.talkT -= sdt; n.g.position.y = terrainHeight(p.x, p.z); return; }
       const dx = n.target.x - p.x, dz = n.target.y - p.z;
       const len = Math.hypot(dx, dz) || 1;
-      p.x += (dx / len) * n.speed * dt;
-      p.z += (dz / len) * n.speed * dt;
+      p.x += (dx / len) * n.speed * sdt;
+      p.z += (dz / len) * n.speed * sdt;
       p.y = terrainHeight(p.x, p.z);
       n.g.rotation.y = Math.atan2(dx, dz);
-      const sw = Math.sin(now * 0.008 + i) * 0.35;
-      n.legs[0]!.rotation.x = sw; n.legs[1]!.rotation.x = -sw;
+      if (near) {
+        const sw = Math.sin(now * 0.008 + i) * 0.35;
+        n.legs[0]!.rotation.x = sw; n.legs[1]!.rotation.x = -sw;
+      }
     });
 
     // ----- animals -----
     animals.forEach((a) => {
       const p = a.g.position;
+      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+      if (pd > cullD) { a.g.visible = false; return; }
+      a.g.visible = true;
+      const near = pd < detailD;
+      if (!near && !slowTick) return;
+      const sdt = near ? dt : adt;
+      activeAnimals++;
       const sleeping = nightness > 0.75 && a.kind !== "dog";
       if (sleeping) { p.y = terrainHeight(p.x, p.z) + 0.05; a.g.rotation.z = 0.35; return; }
       a.g.rotation.z = 0;
-      a.t -= dt;
-      const pd = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
+      a.t -= sdt;
       if (pd < 6 && a.kind !== "dog") {
         a.target.set(p.x + (p.x - player.pos.x), p.z + (p.z - player.pos.z));
       } else if (a.kind === "dog" && pd < 18) {
@@ -1168,8 +1245,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       const dx = a.target.x - p.x, dz = a.target.y - p.z;
       const len = Math.hypot(dx, dz);
       if (len > 1) {
-        p.x += (dx / len) * a.speed * dt;
-        p.z += (dz / len) * a.speed * dt;
+        p.x += (dx / len) * a.speed * sdt;
+        p.z += (dz / len) * a.speed * sdt;
         a.g.rotation.y = Math.atan2(dx, dz) - Math.PI / 2;
       }
       p.y = terrainHeight(p.x, p.z);
@@ -1184,13 +1261,15 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       b.visible = dayness > 0.25;
     });
 
-    // ----- fireflies -----
-    if (ffMat.opacity > 0.02) {
+    // ----- fireflies (throttled, ~10Hz) -----
+    ffT -= dt;
+    if (ffMat.opacity > 0.02 && ffT <= 0) {
+      ffT = 0.1;
       const fp = ffGeo.attributes['position']! as THREE.BufferAttribute;
       for (let i = 0; i < ffCount; i++) {
         const s = ffSeed[i]!;
         fp.setY(i, terrainHeight(fp.getX(i), fp.getZ(i)) + 1.2 + Math.sin(now * 0.001 + s) * 0.8);
-        fp.setX(i, fp.getX(i) + Math.sin(now * 0.0007 + s) * 0.01);
+        fp.setX(i, fp.getX(i) + Math.sin(now * 0.0007 + s) * 0.05);
       }
       fp.needsUpdate = true;
     }
@@ -1274,6 +1353,8 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
       const hh = Math.floor(timeOfDay);
       const mm = Math.floor((timeOfDay % 1) * 60);
       const phase = timeOfDay < 5 || timeOfDay >= 20 ? "Night" : timeOfDay < 8 ? "Dawn" : timeOfDay < 12 ? "Morning" : timeOfDay < 17 ? "Afternoon" : timeOfDay < 19 ? "Evening" : "Dusk";
+      const info = renderer.info;
+      const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
       onHud({
         health: player.health, hunger: player.hunger, stamina: player.stamina,
         timeLabel: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
@@ -1281,6 +1362,24 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
         prompt: currentInteract ? `[E] ${currentInteract.label}` : null,
         inventory: { ...inventory },
         message, fps, objective,
+        quality: qName,
+        perf: showStats
+          ? {
+              fps,
+              frameMs: Math.round((performance.now() - now) * 100) / 100,
+              drawCalls: info.render.calls,
+              triangles: info.render.triangles,
+              programs: info.programs?.length ?? 0,
+              activeNpcs,
+              activeAnimals,
+              visibleChunks: 0,
+              quality: qName,
+              resScale: Math.round(resScale * 100) / 100,
+              geometries: info.memory.geometries,
+              textures: info.memory.textures,
+              memoryMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+            }
+          : null,
       });
     }
   }
@@ -1307,5 +1406,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     },
     craft,
     requestPointerLock: () => renderer.domElement.requestPointerLock(),
+    setQuality: (q: string) => { if (PRESETS[q]) { autoQuality = false; applyQuality(q); } },
+    toggleStats: () => { showStats = !showStats; },
   };
 }
