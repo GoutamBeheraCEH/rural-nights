@@ -313,7 +313,7 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
   }
 
   // ---------- houses / villages ----------
-  const lampLights: { light: THREE.PointLight; base: number }[] = [];
+  const lampLights: { light: THREE.PointLight; base: number; on?: boolean }[] = [];
   const windowMats: THREE.MeshBasicMaterial[] = [];
 
   function buildHouse(x: number, z: number, rot: number, variant: number) {
