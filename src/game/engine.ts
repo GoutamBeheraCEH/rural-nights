@@ -1073,9 +1073,17 @@ export function createGame(container: HTMLElement, onHud: Cb): GameHandle {
     fog.density = 0.0026 + nightness * 0.0016;
     renderer.setClearColor(fog.color);
 
-    // village lights
+    // village lights — pooled: only the N nearest lamps stay lit
     const lampOn = nightness;
-    lampLights.forEach((l) => { l.light.intensity = l.base * lampOn * 1.2; });
+    lightT -= dt;
+    if (lightT <= 0) {
+      lightT = 0.4;
+      const near = lampLights
+        .map((l) => ({ l, d: l.light.getWorldPosition(tmpV).distanceToSquared(player.pos) }))
+        .sort((a, b) => a.d - b.d);
+      near.forEach((e, i) => { e.l.on = i < Q.dynLights && e.d < Q.drawDistance * Q.drawDistance; });
+    }
+    lampLights.forEach((l) => { l.light.intensity = l.on ? l.base * lampOn * 1.2 : 0; });
     windowMats.forEach((m) => m.color.setRGB(1 * (0.25 + lampOn * 0.75), 0.72 * (0.25 + lampOn * 0.75), 0.35 * (0.3 + lampOn * 0.7)));
     ffMat.opacity = Math.max(0, nightness - 0.45) * 1.6;
 
